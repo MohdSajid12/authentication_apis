@@ -16,10 +16,16 @@ const userModel = new mongoose.Schema({
         type : String,
         required : true 
     },
-    profileImage : {
-        type : String,
-        required : true
-    }
+    isVerified : {
+         type :Boolean,
+         default : false
+    },
+    verificationCode:{
+        type : String
+    },
+    verificationCodeExpiry: {
+       type: Date
+    },
 } ,{timestamps : true});
 
 const User  = mongoose.model("User" , userModel);

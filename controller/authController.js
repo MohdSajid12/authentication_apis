@@ -1,7 +1,7 @@
 import User from "../models/userModel.js";
 import bcrypt from  'bcrypt';
 import jwt from 'jsonwebtoken';
-
+import {sendVerificationCode} from "../middleware/emailConfig.js"
 export const signup = async (req,res) =>{
     try{
         const {name , email , password} = req.body || {};
@@ -14,11 +14,16 @@ export const signup = async (req,res) =>{
            return res.status(409).json({success : false , message : "User Already exists"});
         }
         const hashPassword = await bcrypt.hash(password , 10);
+        const verificationCode = Math.floor(100000 + Math.random() *900000).toString();
+        const expiryTime = new Date(Date.now() + 10 * 60 * 1000);
+        //date now current time then 10 minute ko second me convert then millsecond me convert
+        //new date ek object h timetamp ko date object bna deta h 10.00 Am
         const user = new User({
-            name , email , password : hashPassword
+            name , email , password : hashPassword ,verificationCode ,verificationCodeExpiry :expiryTime
         });
         await user.save();
-        return res.status(200).json({success: true , message : "User Registered successfully"});
+        sendVerificationCode(user.email , verificationCode);
+         return res.status(200).json({success: true, message: "Please verify your email using the OTP sent to your registered email address."});
     }
     catch(err){
        console.log(err);
@@ -47,5 +52,40 @@ export const login = async (req,res) =>{
     catch(err){
         console.log(err);
         return res.status(500).json({success :false  , message : err.message});
+    }
+}
+
+export const verifyEmail = async(req,res)=>{
+    try{
+      const {email ,otp } = req.body;
+      if(!email || !otp ){
+        return res.status(422).json({success: false , message : "Email and Otp required"})
+      }
+      const user = await User.findOne({email});
+      if(!user){
+        return res.status(400).json({success: false , message :"User not found"});
+      }
+      if(user.isVerified){
+         return res.status(400).json({success : false , message :"Email already verified"});
+      }
+      if(user.verificationCode !== otp){
+         return res.status(401).json({success: false , message : "Invalid OTP"});
+      }
+
+      if(Date.now > user.verificationCodeExpiry){
+            return res.status(400).json({success : false , message : "OTP expired"});
+      }
+
+      user.isVerified = true;
+      user.verificationCode = null;
+      user.verificationCodeExpiry = null;
+      
+      await user.save();
+      return res.status(200).json({success: true , message : "Email verified successfully"});
+
+    }
+    catch(error){
+        console.log(error);
+        return res.status(500).json({success: false , message : error.message});
     }
 }
