@@ -26,6 +26,9 @@ const userModel = new mongoose.Schema({
     verificationCodeExpiry: {
        type: Date
     },
+    refreshToken : {
+      type :String
+    },
 } ,{timestamps : true});
 
 const User  = mongoose.model("User" , userModel);

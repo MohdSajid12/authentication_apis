@@ -1,7 +1,8 @@
 import User from "../models/userModel.js";
 import bcrypt from  'bcrypt';
-import jwt from 'jsonwebtoken';
-import {sendVerificationCode} from "../middleware/emailConfig.js"
+import {sendVerificationCode} from "../middleware/emailConfig.js";
+import {generateAccessToken,generateRefreshToken} from "../utills/tokenGenerator.js";
+
 export const signup = async (req,res) =>{
     try{
         const {name , email , password} = req.body || {};
@@ -10,9 +11,29 @@ export const signup = async (req,res) =>{
             return res.status(422).json({success: false , message :"All fields required"});
         }
         const userExists = await User.findOne({email:email});
+        // CASE 1 - if user is already verified
         if(userExists){
-           return res.status(409).json({success : false , message : "User Already exists"});
+            if(userExists.isVerified){
+                return res.status(409).json({success : false , message: "User already exists. Please login."})
+            }
+            //not verified
+            const now = Date.now();
+            if(now < userExists.verificationCodeExpiry ){
+                  return res.status(200).json({success :false , message : "Otp already sent , Please verify your email"})
+            }
+             var newotp = Math.floor(100000 + Math.random() *900000).toString();
+             var newExpiry  = new Date(Date.now() + 10 * 60 * 1000);
+
+             userExists.verificationCode = newotp;
+             userExists.verificationCodeExpiry = newExpiry;
+
+             await userExists.save();
+             sendVerificationCode(userExists.email, newOtp);
+
+            return res.status(200).json({success: true,message: "New OTP sent to your email."});
         }
+
+       //CASE-2 : New user signup
         const hashPassword = await bcrypt.hash(password , 10);
         const verificationCode = Math.floor(100000 + Math.random() *900000).toString();
         const expiryTime = new Date(Date.now() + 10 * 60 * 1000);
@@ -23,7 +44,7 @@ export const signup = async (req,res) =>{
         });
         await user.save();
         sendVerificationCode(user.email , verificationCode);
-         return res.status(200).json({success: true, message: "Please verify your email using the OTP sent to your registered email address."});
+        return res.status(200).json({success: true, message: "Please verify your email using the OTP sent to your registered email address."});
     }
     catch(err){
        console.log(err);
@@ -41,12 +62,21 @@ export const login = async (req,res) =>{
         if(!user){
             return res.status(404).json({success : false , message : "User not found"});
         }
+        if(!user.isVerified){
+            return res.status(401).json({success :false , message : "Verify Email first"})
+        }
         const isMatchPassword = await bcrypt.compare(password, user.password);
         if(!isMatchPassword){
             return res.status(401).json({success : false , message : "Invalid credentials"});
         }
-        const token=  jwt.sign({_id : user.id} ,process.env.JWT , {expiresIn :'1d'});
-        return res.status(200).json({success :true , message :`Welcome ${user.name}`});
+
+        const accessToken = generateAccessToken(user);
+        const refreshToken = generateRefreshToken(user);
+        
+        user.refreshToken = refreshToken;
+        await user.save();
+
+        return res.status(200).json({success :true , message :`Welcome ${user.name}` ,accessToken :accessToken ,refreshToken :refreshToken});
 
     }
     catch(err){
