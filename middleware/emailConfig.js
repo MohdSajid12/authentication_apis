@@ -70,7 +70,7 @@ export const sendVerificationCode = async (email, verificationCode) => {
       `,
     });
 
-    console.log("Email sent successfully", response);
+    // console.log("Email sent successfully", response);
   } catch (error) {
     console.log(error);
     throw error; 

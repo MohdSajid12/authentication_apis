@@ -92,10 +92,44 @@ export const verifyEmail = async(req,res)=>{
       
       await user.save();
       return res.status(200).json({success: true , message : "Email verified successfully"});
+      
 
     }
     catch(error){
         console.log(error);
         return res.status(500).json({success: false , message : error.message});
+    }
+}
+
+export const resendOtp = async(req,res)=>{
+    try{
+         const {email} = req.body || {};
+         if(!email){
+            return res.status(400).json({success :false , message : `Email is required`});
+         }
+         const user = await User.findOne({email});
+         if(!user){
+            return res.status(404).json({success :false , message : `User not found`});
+         }
+         if(user.isVerified){
+            return res.status(400).json({success : false , message : `Email already verified Please login`})
+         }
+         if (user.verificationCodeExpiry && user.verificationCodeExpiry > Date.now()) {
+            return res.status(400).json({success: false, message: "Please wait for old OTP to expire" });
+         }
+
+        const verificationCode = Math.floor(100000 + Math.random() *900000).toString();
+
+        sendVerificationCode(user.email , verificationCode);
+        user.isVerified = true;
+        user.verificationCode = null;
+        user.verificationCodeExpiry = null;
+        await user.save();
+        return res.status(200).json({success: true, message: "New OTP sent to your email"});
+
+    }
+    catch(error){
+        console.log(error);
+        return res.status(500).json({success : false , message : `Something went wrong ${error.message}`})
     }
 }
